@@ -462,7 +462,7 @@ function saveMeeting() {
     }
 
     saveToLS(KEYS.meetings, state.meetings);
-    notifyCalendarUpdate(`Admin added/updated meeting: ${data.title}`);
+    notifyCalendarUpdate(`Admin added/updated meeting: ${data.title}`, 'meeting', state.editTarget ? 'updated' : 'added', data.date, data.time);
     document.getElementById('meeting-modal').classList.add('hidden');
     renderMeetingsTable();
     refreshDashboard();
@@ -542,7 +542,7 @@ function saveHoliday() {
     }
 
     saveToLS(KEYS.holidays, state.holidays);
-    notifyCalendarUpdate(`Admin added/updated holiday: ${data.title}`);
+    notifyCalendarUpdate(`Admin added/updated holiday: ${data.title}`, 'holiday', state.editTarget ? 'updated' : 'added', data.date);
     // events.js reads admin_holidays directly on each calendar render — no extra sync needed
     document.getElementById('holiday-modal').classList.add('hidden');
     renderHolidaysTable();
@@ -638,7 +638,7 @@ function saveEvent() {
     }
 
     saveToLS(KEYS.events, state.events);
-    notifyCalendarUpdate(`Admin added/updated event: ${data.title}`);
+    notifyCalendarUpdate(`Admin added/updated event: ${data.title}`, 'event', state.editTarget ? 'updated' : 'added', data.date, data.startTime);
     // events.js reads admin_events directly on each calendar render — no extra sync needed
     document.getElementById('event-modal-admin').classList.add('hidden');
     renderEventsTable();
@@ -652,9 +652,14 @@ function confirmDelete(type, id, name) {
     document.getElementById('confirm-item-name').textContent = `"${name}"`;
     document.getElementById('confirm-dialog-overlay').classList.remove('hidden');
     state.confirmCallback = () => {
+        const item = state[type].find(i => i.id === id);
+        const itemDate = item?.date || item?.startTime?.split('T')[0] || new Date().toISOString().split('T')[0];
+        
         state[type] = state[type].filter(item => item.id !== id);
         saveToLS(KEYS[type], state[type]);
-        notifyCalendarUpdate();
+        const schemaType = type === 'meetings' ? 'meeting' : (type === 'holidays' ? 'holiday' : 'event');
+        const itemTime = item?.time || item?.startTime || '';
+        notifyCalendarUpdate(`Admin deleted ${type.slice(0, -1)}: ${name}`, schemaType, 'deleted', itemDate, itemTime);
         // events.js reads from admin keys directly — calendar auto-refreshes on next render
         showToast('Item deleted successfully.', 'success');
         if (type === 'meetings') renderMeetingsTable();
@@ -763,50 +768,73 @@ function resetForm(formId) {
 }
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
-function showToast(message, type = 'info') {
-    const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', info: 'fa-circle-info' };
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span>${message}</span>`;
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.classList.add('toast-out');
-        setTimeout(() => toast.remove(), 350);
-    }, 3200);
-}
+// (Using the premium version at bottom of file)
 
 // ─── CROSS-TAB SYNC HELPER ────────────────────────────────────────────────
-function notifyCalendarUpdate(message = null) {
+function notifyCalendarUpdate(message = null, type = 'event', action = 'added', date = null, eventTime = null) {
     // Notify main calendar in other tabs that data changed
     window.localStorage.setItem('calendar_sync_trigger', Date.now());
 
     if (message) {
-        // Log internally for debugging
-        console.log(`[Sync] Notifying updates: ${message}`);
+        console.log(`[Sync] Attempting to sync notification: "${message}"`);
         
-        // Show a local confirmation toast for the admin
-        showAdminToast(message);
+        // Use provided date or default if not specified
+        const targetDate = date || new Date().toISOString().split('T')[0];
 
-        const notifications = JSON.parse(localStorage.getItem('admin_notifications') || '[]');
-        notifications.push({
-            id: Date.now(),
-            message: message,
-            timestamp: new Date().toISOString()
+        // Post to backend database
+        fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: type,
+                action: action,
+                title: 'Calendar Update',
+                date: targetDate,
+                eventTime: eventTime || '',
+                message: message
+            })
+        })
+        .then(async res => {
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                console.error(`[Sync] Server returned ${res.status}:`, errData);
+                if (typeof showToast === 'function') {
+                    showToast(`Notification sync failed (${res.status}). Check server logs.`, 'error');
+                }
+            } else {
+                console.log(`[Sync] Notification successfully saved to database.`);
+            }
+        })
+        .catch(err => {
+            console.error('[Sync] Network error during notification sync:', err);
+            if (typeof showToast === 'function') {
+                showToast('Notification sync failed: Connection error.', 'error');
+            }
         });
-        // Keep only last 5 notifications
-        if (notifications.length > 5) notifications.shift();
-        localStorage.setItem('admin_notifications', JSON.stringify(notifications));
     }
 }
 
-/** Show the existing toast in admin panel */
+/** Show a premium toast in admin panel (matches dashboard style) */
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    const icon = type === 'success' ? 'fa-circle-check' : (type === 'error' ? 'fa-circle-xmark' : 'fa-circle-info');
+    toast.innerHTML = `<i class="fa-solid ${icon}"></i><span>${message}</span>`;
+    
+    container.appendChild(toast);
+
+    // Auto remove
+    setTimeout(() => {
+        toast.classList.add('toast-out');
+        setTimeout(() => toast.remove(), 400);
+    }, 5000);
+}
+
+// Keep showAdminToast as a wrapper for backward compatibility if needed
 function showAdminToast(msg) {
-    const toast = document.getElementById('admin-toast');
-    const msgEl = document.getElementById('admin-toast-msg');
-    if (toast && msgEl) {
-        msgEl.textContent = msg;
-        toast.classList.remove('hidden');
-        setTimeout(() => toast.classList.add('hidden'), 5000);
-    }
+    showToast(msg, 'info');
 }

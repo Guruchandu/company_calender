@@ -69,15 +69,15 @@
         <main class="main-workspace">
             <header class="main-header">
                 <div class="header-left">
-                    <button id="mobile-menu-btn" class="icon-btn mobile-only"><i class="fa-solid fa-bars"></i></button>
-                    <button id="today-btn" class="btn btn-outline" title="Go to Today"
-                        aria-label="Go to Today">Today</button>
 
-                    <!-- Mobile brand label (shown only on mobile) -->
-                    <span class="header-brand-label"><i class="fa-solid fa-calendar-days"></i> Calendar</span>
 
-                    <!-- View Dropdown Toggle -->
-                    <select id="view-select" class="view-select">
+                    <button id="today-btn" class="btn btn-outline btn-sm today-btn" title="Go to Today">
+                        <i class="fa-solid fa-calendar-day desktop-hidden"></i>
+                        <span class="mobile-hidden">Today</span>
+                    </button>
+
+                    <!-- View Select Tool -->
+                    <select id="view-select" class="view-select mobile-hidden">
                         <option value="day">Day</option>
                         <option value="week">Week</option>
                         <option value="month" selected>Month</option>
@@ -85,15 +85,23 @@
                     </select>
 
                     <div class="month-nav">
-                        <button id="main-prev" class="icon-btn"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button id="main-prev" class="icon-btn sm"><i class="fa-solid fa-chevron-left"></i></button>
                         <h2 id="main-month-year"></h2>
-                        <button id="main-next" class="icon-btn"><i class="fa-solid fa-chevron-right"></i></button>
+                        <button id="main-next" class="icon-btn sm"><i class="fa-solid fa-chevron-right"></i></button>
                     </div>
                 </div>
+
                 <div class="header-right">
-                    <button id="theme-toggle" class="icon-btn"><i class="fa-solid fa-moon"></i></button>
-                    <button id="add-event-header-btn" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add
-                        Event</button>
+                    <button id="theme-toggle" class="icon-btn" title="Toggle Theme">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                    <button id="add-event-header-btn" class="btn btn-primary" title="Add New Event">
+                        <i class="fa-solid fa-plus"></i> <span class="mobile-hidden">Add Event</span>
+                    </button>
+                    <button id="notification-btn" class="icon-btn" style="position: relative;" title="Notifications">
+                        <i class="fa-solid fa-bell"></i>
+                        <span id="notification-badge" class="badge-dot" style="color: red;">0</span>
+                    </button>
                 </div>
             </header>
 
@@ -201,9 +209,11 @@
                         <textarea id="event-desc" rows="3" placeholder="Optional details..."></textarea>
                     </div>
 
-                    <div class="form-group checkbox-group" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;">
+                    <div class="form-group checkbox-group"
+                        style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;">
                         <input type="checkbox" id="event-reminder" style="width: auto; margin: 0;">
-                        <label for="event-reminder" style="margin-bottom: 0; cursor: pointer;">Set Reminder <i class="fa-solid fa-bell" style="color: var(--primary-color);"></i></label>
+                        <label for="event-reminder" style="margin-bottom: 0; cursor: pointer;">Set Reminder <i
+                                class="fa-solid fa-bell" style="color: var(--primary-color);"></i></label>
                     </div>
 
                     <div class="form-actions">
@@ -227,7 +237,7 @@
     <script type="module" src="js/theme.js"></script>
     <script type="module" src="js/events.js"></script>
     <script type="module" src="js/calendar.js"></script>
-    <script type="module" src="js/app.js"></script>
+    <script type="module" src="js/app.js?v=2.0"></script>
 </body>
 
 </html>

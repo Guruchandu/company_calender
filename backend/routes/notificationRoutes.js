@@ -5,10 +5,17 @@ const Notification = require('../models/Notification');
 // POST /api/notifications — Create a new notification
 router.post('/', async (req, res) => {
     try {
-        const { type, action, title, date, message } = req.body;
+        const { type, action, title, date, eventTime, message } = req.body;
+        console.log(`[API] Received notification request:`, req.body);
 
         if (!type || !action || !title || !message) {
-            return res.status(400).json({ error: 'type, action, title, and message are required.' });
+            const missing = [];
+            if (!type) missing.push('type');
+            if (!action) missing.push('action');
+            if (!title) missing.push('title');
+            if (!message) missing.push('message');
+            console.error(`[API] Validation failed: Missing fields [${missing.join(', ')}]`);
+            return res.status(400).json({ error: `Missing fields: ${missing.join(', ')}` });
         }
 
         const notification = new Notification({
@@ -16,13 +23,19 @@ router.post('/', async (req, res) => {
             action,
             title,
             date: date || '',
+            eventTime: eventTime || '',
             message
         });
 
         await notification.save();
+        console.log(`[API] Notification saved successfully: ID ${notification._id}`);
         res.status(201).json({ success: true, notification });
     } catch (err) {
-        console.error('Error creating notification:', err);
+        console.error('[API] Error creating notification:', err.message);
+        if (err.name === 'ValidationError') {
+            console.error('[API] Mongoose Validation Error Details:', err.errors);
+            return res.status(400).json({ error: 'DB Validation Error', details: err.errors });
+        }
         res.status(500).json({ error: 'Failed to create notification.' });
     }
 });

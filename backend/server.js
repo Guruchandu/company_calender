@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -9,6 +10,9 @@ const PORT = process.env.PORT || 5000;
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from the project root (one directory up from backend)
+app.use(express.static(path.join(__dirname, '..')));
 
 // ─── MongoDB Connection ──────────────────────────────────────────────────────
 const mongoURI = process.env.mongodb_url;
@@ -21,10 +25,10 @@ if (!mongoURI) {
 mongoose.connect(mongoURI, {
     dbName: 'company_calendar'
 })
-    .then(() => console.log('✅ Connected to MongoDB — company_calendar'))
+    .then(() => console.log('✅ Connected to MongoDB Atlas — company_calendar'))
     .catch((err) => {
         console.error('❌ MongoDB connection error:', err.message);
-        process.exit(1);
+        console.warn('⚠️ Server will continue running in "offline mode" without database support.');
     });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────

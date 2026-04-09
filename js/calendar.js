@@ -104,7 +104,15 @@ export const calendar = {
     },
 
     setSelectDate: (dateString) => {
-        calendar.selectedDate = new Date(dateString);
+        let newDate;
+        if (dateString.includes('-') && !dateString.includes('T')) {
+            const [y, m, d] = dateString.split('-').map(Number);
+            newDate = new Date(y, m - 1, d);
+        } else {
+            newDate = new Date(dateString);
+        }
+        calendar.selectedDate = newDate;
+
         // If the date is in a different month, switch calendar to that month
         if (calendar.selectedDate.getMonth() !== calendar.currentDate.getMonth() ||
             calendar.selectedDate.getFullYear() !== calendar.currentDate.getFullYear()) {

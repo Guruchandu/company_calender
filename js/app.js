@@ -103,6 +103,183 @@ document.addEventListener('DOMContentLoaded', () => {
     // 9. Modal forms & actions
     setupEventModal();
 
+    // 9.5 Notifications Badge
+    let lastNotificationFetchTime = null;
+
+    async function updateNotificationBadge() {
+        const cacheBuster = Date.now();
+        console.log(`[Badge] Fetching unread notifications... (cb: ${cacheBuster})`);
+        try {
+            const res = await fetch(`/api/notifications?unreadOnly=true&_=${cacheBuster}`);
+            if (res.ok) {
+                const data = await res.json();
+                const unreadCount = data.notifications ? data.notifications.length : 0;
+                console.log(`[Badge] Sync Result: ${unreadCount} unread items found.`);
+                
+                const badge = document.getElementById('notification-badge');
+                if (badge) {
+                    if (unreadCount > 0) {
+                        badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                        badge.style.display = 'block';
+                        badge.style.opacity = '1'; // Reset opacity if previously dimmed
+                        
+                        // Show toast for newly popped notifications
+                        if (data.notifications.length > 0) {
+                            const latest = data.notifications[0]; // assuming latest is first
+                            if (!lastNotificationFetchTime || new Date(latest.createdAt) > lastNotificationFetchTime) {
+                                if (typeof showToast === 'function') {
+                                    showToast(latest.message || 'Calendar updated!', 'success');
+                                }
+                                lastNotificationFetchTime = new Date();
+                            }
+                        }
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Failed to fetch notifications from DB:', err);
+        }
+    }
+    
+    updateNotificationBadge();
+    // Poll for new notifications from DB every 5 seconds
+    setInterval(updateNotificationBadge, 5000);
+
+    // Immediate sync on tab focus or storage event
+    window.addEventListener('focus', updateNotificationBadge);
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'calendar_sync_trigger') {
+            updateNotificationBadge();
+        }
+    });
+
+    document.getElementById('notification-btn')?.addEventListener('click', openNotificationPanel);
+
+    async function markAllNotificationsRead() {
+        try {
+            await fetch('/api/notifications/mark-all-read', {
+                method: 'PATCH'
+            });
+            updateNotificationBadge();
+            // Re-render the panel if it's open to show read status
+            if (document.getElementById('day-panel').classList.contains('open') && 
+                document.getElementById('panel-date-display').textContent === 'Notifications') {
+                openNotificationPanel();
+            }
+            if (typeof showToast === 'function') {
+                showToast('All notifications cleared', 'info');
+            }
+        } catch (err) {
+            console.error('Failed to clear notifications:', err);
+        }
+    }
+
+    async function openNotificationPanel() {
+        console.log('[Panel] Opening notification center...');
+        const dayPanel = document.getElementById('day-panel');
+        const panelTitle = document.getElementById('panel-date-display');
+        const listContainer = document.getElementById('event-list');
+        const addBtn = document.getElementById('add-event-panel-btn');
+
+        panelTitle.textContent = 'Notifications';
+        if (addBtn) addBtn.style.display = 'none';
+
+        try {
+            const res = await fetch('/api/notifications?unreadOnly=true');
+            console.log(`[Panel] Fetch status: ${res.status}`);
+            const data = await res.json();
+            const notifications = data.notifications || [];
+            console.log(`[Panel] Total notifications loaded: ${notifications.length}`);
+
+            let html = `
+                <button class="btn btn-outline mark-all-read-btn" id="mark-all-read-btn-panel">
+                    <i class="fa-solid fa-check-double"></i> Mark all as read
+                </button>
+            `;
+
+            if (notifications.length === 0) {
+                html += `<div class="empty-state">No notifications yet.</div>`;
+            } else {
+                html += notifications.map(n => {
+                    // Format the TARGET Event Date (e.g., "Apr 10")
+                    let eventDateDisplay = '';
+                    try {
+                        if (n.date && n.date.includes('-') && !n.date.includes('T')) {
+                            // Handle YYYY-MM-DD
+                            const [y, m, d] = n.date.split('-').map(Number);
+                            eventDateDisplay = new Date(y, m - 1, d).toLocaleDateString(undefined, {
+                                month: 'short', day: 'numeric'
+                            });
+                        } else if (n.date || n.createdAt) {
+                            // Fallback for ISO strings or createdAt
+                            const fallbackDate = new Date(n.date || n.createdAt);
+                            if (!isNaN(fallbackDate)) {
+                                eventDateDisplay = fallbackDate.toLocaleDateString(undefined, {
+                                    month: 'short', day: 'numeric'
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        eventDateDisplay = 'Update';
+                    }
+                    
+                    if (!eventDateDisplay || eventDateDisplay.includes('Invalid') || eventDateDisplay === 'undefined') {
+                        eventDateDisplay = 'Recent';
+                    }
+                    
+                    const eventTimeDisplay = n.eventTime ? `, ${n.eventTime}` : '';
+                    const displayDateTime = `${eventDateDisplay}${eventTimeDisplay}`;
+
+                    const iconClass = n.message.toLowerCase().includes('delete') ? 'delete' : 'update';
+                    const icon = iconClass === 'delete' ? 'fa-trash-can' : 'fa-clock-rotate-left';
+                    
+                    return `
+                        <div class="notification-card ${n.read ? '' : 'unread'}" 
+                             data-date="${n.date}" 
+                             style="cursor: pointer;"
+                             title="Click to view this date">
+                            <div class="notification-icon-wrap ${iconClass}">
+                                <i class="fa-solid ${icon}"></i>
+                            </div>
+                            <div class="notification-info">
+                                <h4>${n.title || 'System Update'}</h4>
+                                <p>${n.message}</p>
+                                <div class="notification-meta">
+                                    <span>${displayDateTime}</span>
+                                    ${n.read ? '<span><i class="fa-solid fa-circle-check"></i> Seen</span>' : '<span style="color:#ef4444; font-weight: 600;">View <i class="fa-solid fa-chevron-right" style="font-size: 0.7em;"></i></span>'}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            listContainer.innerHTML = html;
+            
+            // Re-bind click for "Mark all read" in panel
+            document.getElementById('mark-all-read-btn-panel')?.addEventListener('click', markAllNotificationsRead);
+
+            // Add click listeners to cards to jump to date
+            listContainer.querySelectorAll('.notification-card').forEach(card => {
+                card.addEventListener('click', (e) => {
+                    // Don't jump if they clicked a button inside (though there aren't any currently)
+                    const dateStr = card.getAttribute('data-date');
+                    if (dateStr && dateStr !== '') {
+                        calendar.setSelectDate(dateStr);
+                        openDayPanel(dateStr);
+                    }
+                });
+            });
+
+            dayPanel.classList.add('open');
+        } catch (err) {
+            console.error('Failed to load notifications:', err);
+            listContainer.innerHTML = `<div class="empty-state">Error loading notifications.</div>`;
+        }
+    }
+
     // 10. Live Sync for Admin Updates
     window.addEventListener('storage', (e) => {
         if (e.key === 'calendar_sync_trigger') {
@@ -199,11 +376,22 @@ function openDayPanel(dateStr) {
     const dayPanel = document.getElementById('day-panel');
     const panelTitle = document.getElementById('panel-date-display');
     const listContainer = document.getElementById('event-list');
+    const addBtn = document.getElementById('add-event-panel-btn');
+
+    if (addBtn) addBtn.style.display = 'flex';
 
     // Format date nicely: "Thu, Oct 12, 2026"
-    const displayDate = new Date(dateStr).toLocaleDateString(undefined, {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-    });
+    let displayDate = '';
+    if (dateStr.includes('-') && !dateStr.includes('T')) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        displayDate = new Date(y, m - 1, d).toLocaleDateString(undefined, {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+    } else {
+        displayDate = new Date(dateStr).toLocaleDateString(undefined, {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+    }
 
     panelTitle.textContent = displayDate;
 
